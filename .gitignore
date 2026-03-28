@@ -11,6 +11,9 @@ worker/__pycache__/
 worker/**/__pycache__/
 worker/data/
 worker/.next/
+worker/.env
+worker/*.pyc
+worker/*.egg-info/
 
 # OS / editor
 .DS_Store
