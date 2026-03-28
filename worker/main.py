@@ -12,6 +12,7 @@ Endpoints:
 """
 
 import asyncio
+import base64
 import json
 import os
 import time
@@ -162,6 +163,11 @@ async def websocket_screen(websocket: WebSocket):
 @app.post("/api/observe")
 async def observe(req: ObserveRequest):
     """Real-time observer — analyze screenshot + recent steps during a run."""
+    # Inject server-side screenshot if frontend didn't provide one
+    if not req.screenshot_base64:
+        frame = streamer.get_latest_frame()
+        if frame:
+            req.screenshot_base64 = base64.b64encode(frame).decode("utf-8")
     result = await observe_realtime(req)
     return result
 

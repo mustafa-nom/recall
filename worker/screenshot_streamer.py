@@ -33,6 +33,10 @@ class ScreenshotStreamer:
         for ws in disconnected:
             self.remove_client(ws)
 
+    def get_latest_frame(self) -> bytes | None:
+        """Return the most recent screenshot frame, or None if no frame captured yet."""
+        return self._latest_frame
+
     async def stop(self):
         """Close all client connections."""
         for ws in self._clients[:]:

@@ -35,6 +35,7 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
         if name == "navigate_to":
             url = args["url"]
             await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            await asyncio.sleep(1.0)  # Allow JS frameworks to render
             return {"status": "navigated", "url": url}
 
         elif name == "click_element":
@@ -42,7 +43,7 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
             y = args.get("y", 0)
             desc = args.get("description", "")
             await page.mouse.click(x, y)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.8)  # Allow UI transitions/animations on SPAs
             return {"status": "clicked", "description": desc, "x": x, "y": y}
 
         elif name == "type_text":
@@ -51,6 +52,9 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
             if x is not None and y is not None:
                 await page.mouse.click(x, y)
                 await asyncio.sleep(0.3)
+            # Select all existing text first so typing replaces it
+            await page.keyboard.press("Control+a")
+            await asyncio.sleep(0.1)
             await page.keyboard.type(text, delay=50)
             return {"status": "typed", "text": text}
 

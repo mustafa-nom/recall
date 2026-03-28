@@ -23,23 +23,24 @@ OBSERVER_MODEL = "gemini-2.5-flash"
 
 REALTIME_PROMPT = """You are an expert browser automation coach watching an AI agent perform a web task in real-time.
 
-You may be seeing a screenshot of the current browser state, along with the agent's recent actions. If no screenshot is provided, analyze based on the action log alone.
+You are seeing a screenshot of the current browser state along with the agent's recent actions.
 
-Your job: identify ONE specific, actionable optimization the agent could use RIGHT NOW or in future runs of similar tasks.
+Your job: identify ONE specific, actionable optimization the agent could use RIGHT NOW or in future runs of similar tasks. You should almost ALWAYS find something to suggest — there is nearly always a faster path, a shortcut, or a better strategy.
 
 Focus on:
-- **Keyboard shortcuts**: Ctrl+L (address bar), Ctrl+F (find), Tab (cycle fields), Enter (submit)
-- **Direct URLs**: If the agent is navigating through menus to reach a page that has a known URL
+- **Keyboard shortcuts**: Ctrl+L (address bar), Ctrl+F (find on page), Tab (cycle fields), Enter (submit), Ctrl+A (select all)
+- **Direct URLs**: If the agent is navigating through menus to reach a page that has a known direct URL
 - **Batching**: Multiple sequential clicks that could be one action
-- **Wasted steps**: Unnecessary scrolling, redundant page scans, waiting too long
-- **Smarter strategies**: Using search instead of browsing, using URL parameters
+- **Wasted steps**: Unnecessary scrolling, redundant page scans, clicking when typing would be faster
+- **Smarter strategies**: Using search instead of browsing, using URL parameters, using site-specific features
+- **Page state observations**: If you see the page hasn't loaded fully, elements are missing, or the agent is looking at the wrong area
+- **Alternative approaches**: A completely different way to accomplish the same goal faster
 
 Rules:
-- Only suggest if you see a CLEAR, CONCRETE improvement
+- Default to hasSuggestion: true — only set false if the agent is genuinely optimal
 - Reference specific steps from the action log
 - Be precise: "Use Ctrl+L then type the URL" not "navigate more efficiently"
-- If the agent is already being efficient, respond with hasSuggestion: false
-- Never speculate — only suggest based on what you observe
+- Consider both immediate improvements and tips for future similar runs
 
 Respond in JSON:
 {
@@ -79,7 +80,12 @@ Respond in JSON:
   ]
 }
 
-Return at most 3 suggestions, ordered by impact. If the run was already optimal, return an empty suggestions array."""
+Return at most 3 suggestions, ordered by impact.
+
+IMPORTANT:
+- If the run FAILED or hit the step limit, you MUST return at least 1-2 suggestions about what went wrong and how to fix it. Focus on failure patterns, stuck loops, and alternative strategies.
+- If the run SUCCEEDED but took many steps, suggest optimizations to reduce steps.
+- Only return an empty suggestions array if the run succeeded AND was already near-optimal."""
 
 
 # --- Request Models ---
@@ -125,10 +131,13 @@ async def observe_realtime(req: ObserveRequest) -> dict:
             prev_text += f"  - {s}\n"
 
     # Build content parts
+    if steps_text:
+        prompt_text = f"Task: {req.task}\n\nRecent agent actions:\n{steps_text}{prev_text}\n\nAnalyze the actions and screenshot above. Find an optimization."
+    else:
+        prompt_text = f"Task: {req.task}\n\nThe agent is just starting this task. Based on the task and the current browser screenshot, suggest the best strategy or shortcut to accomplish this efficiently.{prev_text}"
+
     parts: list[types.Part] = [
-        types.Part(
-            text=f"Task: {req.task}\n\nRecent agent actions:\n{steps_text}{prev_text}\n\nAnalyze the actions above."
-        ),
+        types.Part(text=prompt_text),
     ]
 
     # Include screenshot if available
@@ -140,9 +149,6 @@ async def observe_realtime(req: ObserveRequest) -> dict:
                     data=screenshot_bytes, mime_type="image/jpeg"
                 )
             )
-        )
-        parts[0] = types.Part(
-            text=f"Task: {req.task}\n\nRecent agent actions:\n{steps_text}{prev_text}\n\nAnalyze this screenshot and the actions above."
         )
 
     response = await client.aio.models.generate_content(
@@ -187,12 +193,19 @@ async def observe_post_run(req: PostRunObserveRequest) -> dict:
             f"({timing.get('stepDurationMs', '?')}ms)\n"
         )
 
+    status_note = ""
+    if not req.success:
+        status_note = "\n\n*** THIS RUN FAILED. You MUST provide suggestions for what went wrong and how to improve. ***\n"
+    elif len(req.all_steps) >= 15:
+        status_note = "\n\n*** This run took many steps. Look for repetition and inefficiency. ***\n"
+
     summary = (
         f"Task: {req.task}\n"
         f"Domain: {req.domain}\n"
         f"Success: {req.success}\n"
         f"Total time: {req.total_time_ms}ms\n"
-        f"Total steps: {len(req.all_steps)}\n\n"
+        f"Total steps: {len(req.all_steps)}\n"
+        f"{status_note}\n"
         f"Full action log:\n{steps_text}"
     )
 

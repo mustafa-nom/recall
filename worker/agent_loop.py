@@ -9,6 +9,7 @@ falls back to local Playwright otherwise.
 import asyncio
 import os
 import time
+from collections import Counter
 from typing import AsyncGenerator
 
 import httpx
@@ -126,7 +127,13 @@ Rules:
 7. Use extract_text to read specific information from the page.
 8. Call task_complete when you've achieved the goal or determined it cannot be done.
 9. Be efficient — take the most direct path to complete the task.
-10. Coordinates are relative to the 1280x720 viewport shown in the screenshot."""
+10. NEVER repeat the same action more than twice. If an action didn't work the first time, try a completely different approach.
+11. If a website isn't loading or responding as expected, try alternatives: a different URL, a search engine query, or a different site entirely.
+12. If you've attempted the same approach 3 times without progress, call task_complete with success=false and explain what went wrong.
+13. Prefer direct URLs over multi-step navigation (e.g., go to google.com/maps directly instead of navigating through google.com).
+14. When typing into input fields on complex websites (Google Flights, Maps, etc.), always click the field first to ensure focus, then type. Existing text in the field will be automatically cleared.
+15. After navigating to a new page, look at the screenshot carefully to confirm elements are visible and the page has loaded before interacting.
+16. Coordinates are relative to the 1280x720 viewport shown in the screenshot."""
 
 
 def build_system_prompt(shortcuts: list[str]) -> str:
@@ -248,7 +255,7 @@ class GeminiLiveAgent:
                 ) as session:
                     # Initial screenshot + task
                     screenshot = await take_screenshot(page)
-                    if self.streamer and not use_cloud:
+                    if self.streamer:
                         await self.streamer.broadcast(screenshot)
 
                     await session.send_client_content(
@@ -269,6 +276,8 @@ class GeminiLiveAgent:
                     task_done = False
                     final_message = ""
                     final_success = False
+                    action_history: list[str] = []  # Track action signatures for loop detection
+                    loop_terminated = False
 
                     for step in range(self.max_steps):
                         step_start = time.time()
@@ -327,6 +336,11 @@ class GeminiLiveAgent:
 
                                     step_count += 1
 
+                                    # Loop detection: track action signatures
+                                    if fc.name != "task_complete":
+                                        sig = f"{fc.name}:{sorted(args.items())}"
+                                        action_history.append(sig)
+
                                     if fc.name == "task_complete":
                                         task_done = True
                                         final_success = result.get(
@@ -351,17 +365,45 @@ class GeminiLiveAgent:
                                 if task_done:
                                     break
 
+                                # Loop detection: check recent actions for repetition
+                                loop_warning = ""
+                                if len(action_history) >= 5:
+                                    recent = action_history[-5:]
+                                    counts = Counter(recent)
+                                    most_common_sig, most_common_count = counts.most_common(1)[0]
+                                    if most_common_count >= 5:
+                                        # Hard terminate — agent is hopelessly stuck
+                                        loop_terminated = True
+                                        task_done = True
+                                        final_success = False
+                                        final_message = "Agent stuck in repeated loop — terminated"
+                                        print(f"[loop-detect] Hard termination: '{most_common_sig}' repeated {most_common_count}x")
+                                        break
+                                    elif most_common_count >= 3:
+                                        # Warn the agent to change approach
+                                        loop_warning = (
+                                            "\n\nWARNING: You are repeating the same action multiple times and it is not working. "
+                                            "You MUST try a completely different strategy NOW. Consider: a different URL, "
+                                            "a different search engine, or a different approach entirely. "
+                                            "If you cannot make progress, call task_complete with success=false."
+                                        )
+                                        print(f"[loop-detect] Warning injected: '{most_common_sig}' repeated {most_common_count}x")
+
                                 await asyncio.sleep(0.5)
                                 screenshot = await take_screenshot(page)
-                                if self.streamer and not use_cloud:
+                                if self.streamer:
                                     await self.streamer.broadcast(screenshot)
+
+                                screenshot_text = "Here is the updated screenshot after the action."
+                                if loop_warning:
+                                    screenshot_text += loop_warning
 
                                 await session.send_client_content(
                                     turns=types.Content(
                                         role="user",
                                         parts=[
                                             types.Part(
-                                                text="Here is the updated screenshot after the action."
+                                                text=screenshot_text
                                             ),
                                             types.Part(
                                                 inline_data=types.Blob(
