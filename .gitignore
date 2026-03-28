@@ -1,0 +1,16 @@
+# Local trees and planning docs not tracked in this repository
+deepmind-hackatho/
+slipstream/
+plan.md
+RECALL_IMPLEMENTATION_PLAN.md
+
+# Python worker — local runtime and embeddings
+worker/venv/
+worker/.venv/
+worker/__pycache__/
+worker/**/__pycache__/
+worker/data/
+worker/.next/
+
+# OS / editor
+.DS_Store
