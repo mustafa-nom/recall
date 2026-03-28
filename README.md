@@ -2,7 +2,54 @@
 
 Recall is a **self-improving browsing agent**: a Next.js UI sends tasks to a Python worker that controls a real browser (Playwright) using the **Gemini Live API**, while a **Hub** stores and retrieves learned shortcuts with semantic search (ChromaDB + Gemini embeddings).
 
-## Architecture
+## Architecture diagram
+
+Flow is similar in spirit to classic Gemini competition submissions: **user input** on the left, **model roles** in the middle, **OUTPUT** on the right, plus a **parallel streaming** band for live UI updates.
+
+![Recall system architecture](docs/images/recall-architecture.png)
+
+*(The Markdown preview in some editors hides `*.svg` images; this PNG is for reliable preview. A vector version is still in [`docs/images/recall-architecture.svg`](docs/images/recall-architecture.svg). On GitHub, either format works.)*
+
+## Which Gemini capability does what?
+
+| Role | API / model style | What it does in Recall |
+|------|-------------------|-------------------------|
+| **Executor (browser agent)** | **Gemini Live API** (multimodal live session) | Sees **screenshots + your goal**, returns **tool calls** (navigate, click, type, …); the worker runs them in a real browser and loops until done. |
+| **Observer (suggestions)** | **Gemini Flash** (standard generate requests) | **Analyzes** runs during / after execution and **proposes** improvements that can be saved to the Hub. |
+| **Memory search (Hub)** | **Gemini embeddings** | Turns task text into vectors so the app can **pull relevant shortcuts** from the vector store **before** each run. |
+| **Optional focus check** | **Gemini Flash** + image | Sometimes used to **verify** whether the right field is focused after a click (helps with finicky inputs). |
+
+## Privacy and data
+
+- **Screenshots** from the automated browser are sent to **Google’s Gemini APIs** as part of the agent and observer flows. Treat tasks and pages as **sensitive**; do not run against private data you are not allowed to send to a third-party API.
+- **API keys** stay on your machines / host env (e.g. `worker/.env`, Vercel env). They are **not** baked into the client.
+- The **Hub** stores **shortcut text and metadata** locally under `worker/data/` (vector DB). It is **not** encrypted by this repo; protect the worker host if you deploy.
+- **Sessions** are oriented around **your** browser automation runs; this project does not implement enterprise compliance guarantees—use accordingly.
+
+## Third-party APIs and optional services
+
+| Service | Required? | Purpose |
+|---------|-------------|---------|
+| **Google Gemini API** | **Yes** | Live agent, Flash observers, embeddings. |
+| **Browser Use Cloud** (or similar) | **No** | If configured, can provide a **hosted browser** and live view URL; otherwise the worker uses **local Chromium** via Playwright. |
+| **Playwright / Chromium** | **Yes** (local path) | Installed via `playwright install chromium` for local automation. |
+
+## Platform notes and gotchas
+
+- **Two processes in dev**: run the **Python worker** and the **Next.js app** separately (`uvicorn` + `npm run dev`). The UI proxies to the worker; one alone is not enough.
+- **Python** 3.11+ and **Node** 20+ are assumed; older versions may break.
+- **First startup** can be slower while embeddings / vector DB **warm up** (the worker tries a warmup pass on boot).
+- **Production**: if the frontend and worker are on **different origins**, configure **CORS** on the worker for your site URL (see deploy section below).
+- **WebSockets**: the live preview uses **WS**; ensure your host/proxy allows **WebSocket** upgrades to the worker.
+
+## Authors and contact
+
+- Built for the **Google Gemini** API ecosystem (competition / hackathon submission style).
+- **Questions:** open a GitHub issue or reach out via the contact info on your profile.
+
+---
+
+## Repository layout
 
 | Part | Role |
 |------|------|
