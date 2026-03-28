@@ -126,14 +126,21 @@ Rules:
 6. Use scroll_page if you need to see content below/above the visible area.
 7. Use extract_text to read specific information from the page.
 8. Call task_complete when you've achieved the goal or determined it cannot be done.
-9. Be efficient — take the most direct path to complete the task.
+9. Be efficient — take the most direct path to complete the task. For SEARCH tasks, ALWAYS prefer navigating directly to a URL with query parameters instead of clicking search bars and typing. Examples: navigate_to("https://hn.algolia.com/?q=browser+agents"), navigate_to("https://en.wikipedia.org/w/index.php?search=artificial+intelligence"), navigate_to("https://www.google.com/maps/search/Italian+restaurant+Manhattan"). This is faster and more reliable than finding and clicking a search input.
 10. NEVER repeat the same action more than twice. If an action didn't work the first time, try a completely different approach.
 11. If a website isn't loading or responding as expected, try alternatives: a different URL, a search engine query, or a different site entirely.
 12. If you've attempted the same approach 3 times without progress, call task_complete with success=false and explain what went wrong.
 13. Prefer direct URLs over multi-step navigation (e.g., go to google.com/maps directly instead of navigating through google.com).
 14. When typing into input fields on complex websites (Google Flights, Maps, etc.), always click the field first to ensure focus, then type. Existing text in the field will be automatically cleared.
 15. After navigating to a new page, look at the screenshot carefully to confirm elements are visible and the page has loaded before interacting.
-16. Coordinates are relative to the 1280x720 viewport shown in the screenshot."""
+16. Coordinates are relative to the 1280x720 viewport shown in the screenshot.
+17. For autocomplete/dropdown inputs (Google Flights, Maps, booking sites, search bars): after typing, WAIT for the dropdown suggestions to appear in the next screenshot. Then click the correct suggestion from the dropdown, or press Escape to dismiss it. Do NOT re-click the input field if the text looks wrong — the autocomplete likely changed it. Use the dropdown instead.
+18. When you see an autocomplete dropdown with suggestions, click the EXACT suggestion you want. Do not blindly press Enter, as it selects the first/highlighted option which may be wrong (e.g., a different city or airport).
+19. On travel booking sites (Google Flights, Expedia, Kayak, etc.), input fields for origin, destination, dates, and passengers are positioned close together. Be EXTREMELY precise with coordinates. The origin/departure field is typically on the LEFT side of the search row, the destination field is to its RIGHT, and date fields are further right or below. Look for the text labels or placeholder text inside each field to confirm which one you are targeting. Do NOT click on date pickers, calendar icons, or passenger selectors when you intend to type a city name.
+20. CRITICAL: After clicking an input field and BEFORE typing, examine the visual feedback carefully. Look for: (a) a blinking cursor or blue highlight in the expected field, (b) any popup/overlay that opened confirms the correct area, (c) placeholder text inside the field matches what you expect. If the wrong element appears to have focus (e.g., a date picker opened when you wanted a city field), press Escape first, then click the correct element with adjusted coordinates.
+21. When multiple interactive elements are close together (within ~50px), aim for the CENTER of the target element's text label or input area, not the edges. If your first click activates the wrong element, adjust your coordinates by at least 40-60 pixels in the appropriate direction for the retry.
+22. On search results pages (YouTube, Google, Amazon, DuckDuckGo, etc.): ALWAYS prefer the first clearly visible, non-sponsored/non-ad result. Do NOT scroll to compare results unless the task explicitly asks for "all options" or "compare multiple." If a result has an "Ad", "Sponsored", or "Promoted" badge, SKIP it and take the next organic result. Scrolling on search results typically loads more ads, not higher-quality results.
+23. When a task asks for "top", "best", "most viewed", or "most popular" on a search/listing page, treat the first non-ad result as the answer. Search engines and platforms already rank results by relevance. You do NOT need to scroll through the entire page to verify — trust the platform's ranking and pick the first relevant organic result immediately."""
 
 
 def build_system_prompt(shortcuts: list[str]) -> str:
@@ -225,6 +232,10 @@ class GeminiLiveAgent:
 
             await page.goto("about:blank")
 
+            # Start continuous screenshot streaming (full-res capture, downscaled for WebSocket)
+            if self.streamer:
+                self.streamer.start_capture_loop(page, take_screenshot)
+
             system_prompt = build_system_prompt(self.shortcuts)
 
             config = types.LiveConnectConfig(
@@ -255,7 +266,7 @@ class GeminiLiveAgent:
                 ) as session:
                     # Initial screenshot + task
                     screenshot = await take_screenshot(page)
-                    if self.streamer and not use_cloud:
+                    if self.streamer:
                         await self.streamer.broadcast(screenshot)
 
                     await session.send_client_content(
@@ -337,8 +348,12 @@ class GeminiLiveAgent:
                                     step_count += 1
 
                                     # Loop detection: track action signatures
+                                    # Normalize scroll actions to ignore pixel variance
                                     if fc.name != "task_complete":
-                                        sig = f"{fc.name}:{sorted(args.items())}"
+                                        if fc.name == "scroll_page":
+                                            sig = f"scroll_page:direction={args.get('direction')}"
+                                        else:
+                                            sig = f"{fc.name}:{sorted(args.items())}"
                                         action_history.append(sig)
 
                                     if fc.name == "task_complete":
@@ -393,10 +408,8 @@ class GeminiLiveAgent:
                                     await page.wait_for_load_state("networkidle", timeout=3000)
                                 except Exception:
                                     pass
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(0.2)
                                 screenshot = await take_screenshot(page)
-                                if self.streamer and not use_cloud:
-                                    await self.streamer.broadcast(screenshot)
 
                                 screenshot_text = "Here is the updated screenshot after the action."
                                 if loop_warning:
@@ -439,7 +452,10 @@ class GeminiLiveAgent:
                         "success": final_success if task_done else False,
                         "message": final_message
                         if task_done
-                        else f"Max steps ({self.max_steps}) reached",
+                        else (
+                            f"Agent turn limit ({self.max_steps}) reached — "
+                            f"{step_count} action(s) taken"
+                        ),
                         "totalActions": step_count,
                         "timing": {
                             "totalElapsedMs": total_time,
@@ -460,4 +476,6 @@ class GeminiLiveAgent:
                 }
 
             finally:
+                if self.streamer:
+                    self.streamer.stop_capture_loop()
                 await browser.close()

@@ -1,169 +1,61 @@
 """
-ChromaDB Cloud storage for the Agent Hub.
+ChromaDB storage for the Agent Hub.
 
-Uses Chroma Cloud with hybrid search:
-  - Dense embeddings via Chroma Cloud Qwen (semantic similarity)
-  - Sparse embeddings via Chroma Cloud Splade (keyword matching)
-  - Reciprocal Rank Fusion (RRF) to merge both rankings
+Stores verified shortcuts with embeddings for semantic retrieval.
+Uses Gemini embeddings via google-generativeai.
 """
 
+import json
 import os
 import time
 import uuid
 from typing import Optional
 
 import chromadb
-from chromadb import (
-    Schema,
-    VectorIndexConfig,
-    SparseVectorIndexConfig,
-    Search,
-    K,
-    Knn,
-)
-from chromadb.utils.embedding_functions import (
-    ChromaCloudQwenEmbeddingFunction,
-    ChromaCloudSpladeEmbeddingFunction,
-)
-from chromadb.utils.embedding_functions.chroma_cloud_qwen_embedding_function import (
-    ChromaCloudQwenEmbeddingModel,
-)
+from google import genai
 
 COLLECTION_NAME = "recall_shortcuts"
+EMBEDDING_MODEL = "gemini-embedding-001"
 
 
-def _get_client() -> chromadb.CloudClient:
-    """Get Chroma Cloud client."""
-    return chromadb.CloudClient(
-        api_key=os.environ["CHROMA_API_KEY"],
-        tenant=os.environ["CHROMA_TENANT"],
-        database=os.environ["CHROMA_DATABASE"],
-    )
-
-
-def _build_schema() -> Schema:
-    """Build collection schema with dense (Qwen) + sparse (Splade) indexes."""
-    schema = Schema()
-
-    # Dense vector index (Qwen) — no key needed, auto-managed as #embedding
-    dense_ef = ChromaCloudQwenEmbeddingFunction(
-        model=ChromaCloudQwenEmbeddingModel.QWEN3_EMBEDDING_0p6B,
-        task="retrieval",
-    )
-    schema.create_index(
-        config=VectorIndexConfig(
-            source_key=K.DOCUMENT,
-            embedding_function=dense_ef,
-        ),
-    )
-
-    # Sparse vector index (Splade) for keyword-based search
-    sparse_ef = ChromaCloudSpladeEmbeddingFunction()
-    schema.create_index(
-        config=SparseVectorIndexConfig(
-            source_key=K.DOCUMENT,
-            embedding_function=sparse_ef,
-        ),
-        key="sparse_embedding",
-    )
-
-    return schema
+def _get_client() -> chromadb.ClientAPI:
+    """Get ChromaDB client — uses persistent local storage."""
+    persist_dir = os.path.join(os.path.dirname(__file__), "data", "chroma")
+    os.makedirs(persist_dir, exist_ok=True)
+    return chromadb.PersistentClient(path=persist_dir)
 
 
 def _get_collection() -> chromadb.Collection:
-    """Get or create the shortcuts collection with hybrid search schema."""
+    """Get or create the shortcuts collection."""
     client = _get_client()
-    schema = _build_schema()
-
     return client.get_or_create_collection(
         name=COLLECTION_NAME,
-        schema=schema,
+        metadata={"hnsw:space": "cosine"},
     )
 
 
-def _rrf_score(rank: int, k: int = 60) -> float:
-    """Compute RRF score for a rank position. Lower is better."""
-    return 1.0 / (k + rank)
+def _get_genai_client() -> genai.Client:
+    return genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
 
-def _hybrid_search(query: str, n_results: int = 5, where: Optional[dict] = None) -> dict:
-    """
-    Hybrid search: dense (Qwen via legacy query) + sparse (Splade via Search API),
-    merged with Reciprocal Rank Fusion.
-    """
-    collection = _get_collection()
-
-    if collection.count() == 0:
-        return {"ids": [[]], "distances": [[]], "metadatas": [[]], "documents": [[]]}
-
-    actual_n = min(n_results, collection.count())
-    candidate_pool = min(max(actual_n * 5, 50), collection.count())
-
-    # 1. Dense search via legacy query (Qwen embeddings)
-    dense_results = collection.query(
-        query_texts=[query],
-        n_results=candidate_pool,
-        where=where,
+def _embed(text: str) -> list[float]:
+    """Generate embedding using Gemini."""
+    client = _get_genai_client()
+    result = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
     )
+    return result.embeddings[0].values
 
-    # 2. Sparse search via Search API (Splade embeddings)
-    sparse_rank = Knn(
-        query=query,
-        key="sparse_embedding",
-        return_rank=True,
-        limit=candidate_pool,
+
+def _embed_query(text: str) -> list[float]:
+    """Generate query embedding using Gemini."""
+    client = _get_genai_client()
+    result = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
     )
-    sparse_search = (
-        Search()
-        .rank(sparse_rank)
-        .limit(candidate_pool)
-        .select(K.ID, K.SCORE)
-    )
-    sparse_results = collection.search(sparse_search)
-    sparse_rows = sparse_results.rows()[0] if sparse_results.rows() else []
-
-    # 3. Build RRF scores (weight: 60% dense, 40% sparse)
-    dense_weight = 0.6
-    sparse_weight = 0.4
-    rrf_scores: dict[str, float] = {}
-
-    # Dense rankings
-    if dense_results["ids"] and dense_results["ids"][0]:
-        for rank, doc_id in enumerate(dense_results["ids"][0]):
-            rrf_scores[doc_id] = dense_weight * _rrf_score(rank)
-
-    # Sparse rankings
-    for rank, row in enumerate(sparse_rows):
-        doc_id = row["id"]
-        rrf_scores.setdefault(doc_id, 0)
-        rrf_scores[doc_id] += sparse_weight * _rrf_score(rank)
-
-    # Sort by RRF score descending (higher = more relevant)
-    ranked_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:actual_n]
-
-    if not ranked_ids:
-        return {"ids": [[]], "distances": [[]], "metadatas": [[]], "documents": [[]]}
-
-    # 4. Fetch full metadata for top results
-    full_results = collection.get(ids=ranked_ids)
-    id_to_idx = {doc_id: i for i, doc_id in enumerate(full_results["ids"])}
-
-    ids = []
-    distances = []
-    metadatas = []
-    documents = []
-
-    for doc_id in ranked_ids:
-        idx = id_to_idx.get(doc_id)
-        if idx is None:
-            continue
-        ids.append(doc_id)
-        # Convert RRF score to a distance-like value (invert: higher score -> lower distance)
-        distances.append(1.0 - rrf_scores[doc_id] * 60)  # Normalize roughly to 0-1
-        metadatas.append(full_results["metadatas"][idx] if full_results["metadatas"] else {})
-        documents.append(full_results["documents"][idx] if full_results["documents"] else "")
-
-    return {"ids": [ids], "distances": [distances], "metadatas": [metadatas], "documents": [documents]}
+    return result.embeddings[0].values
 
 
 def store_suggestion(
@@ -176,45 +68,49 @@ def store_suggestion(
     estimated_impact: str = "medium",
     source_run_id: str = "",
 ) -> dict:
-    """Store a new shortcut in Chroma Cloud. Returns the stored shortcut."""
+    """Store a new shortcut in ChromaDB. Returns the stored shortcut."""
     collection = _get_collection()
 
     # Generate ID
     shortcut_id = f"sc-{uuid.uuid4().hex[:12]}"
 
-    # Build document text for embedding
+    # Build embedding text from key fields
     embed_text = f"{task_pattern} {suggestion} {how}"
+    embedding = _embed(embed_text)
 
-    # Check for semantic duplicates via hybrid search
+    # Check for near-exact duplicates (similarity > 0.88) on the same domain
     try:
-        results = _hybrid_search(embed_text, n_results=3)
-        if results["ids"] and results["ids"][0]:
-            for i, doc_id in enumerate(results["ids"][0]):
-                dist = results["distances"][0][i] if results["distances"][0] else 1.0
-
-                # RRF distances are absolute scores; lower = more similar
-                # Skip if not similar enough (threshold tuned for RRF scores)
-                if dist > 0.03:  # Very similar results have RRF scores < 0.03
+        existing = collection.query(
+            query_embeddings=[embedding],
+            n_results=3,
+        )
+        if existing["distances"] and existing["distances"][0]:
+            for i, dist in enumerate(existing["distances"][0]):
+                if dist > 0.12:  # cosine distance > 0.12 = similarity < 0.88
                     continue
 
-                existing_meta = results["metadatas"][0][i] if results["metadatas"][0] else {}
+                existing_meta = existing["metadatas"][0][i] if existing["metadatas"][0] else {}
 
-                # Extra check: if borderline similarity, require same domain
-                if dist > 0.02 and site_domain and existing_meta.get("site_domain", "") != site_domain:
+                # Always require same domain to merge — prevents cross-site collapse
+                existing_domain = existing_meta.get("site_domain", "")
+                if site_domain and existing_domain and site_domain != existing_domain:
                     continue
 
                 # Match found — update existing
-                existing_id = doc_id
+                existing_id = existing["ids"][0][i]
                 run_count = int(existing_meta.get("run_count", "1")) + 1
 
+                # Update with latest info
                 updated_meta = {
                     **existing_meta,
                     "run_count": str(run_count),
                     "updated_at": str(int(time.time())),
                 }
+                # Update task_pattern if new one is longer/more descriptive
                 if len(task_pattern) > len(existing_meta.get("task_pattern", "")):
                     updated_meta["task_pattern"] = task_pattern
-                if site_domain and existing_meta.get("site_domain", "") in ("", "unknown"):
+                # Update domain if was "unknown" and now we have a real one
+                if site_domain and existing_domain in ("", "unknown"):
                     updated_meta["site_domain"] = site_domain
 
                 collection.update(ids=[existing_id], metadatas=[updated_meta])
@@ -244,6 +140,7 @@ def store_suggestion(
 
     collection.add(
         ids=[shortcut_id],
+        embeddings=[embedding],
         documents=[embed_text],
         metadatas=[metadata],
     )
@@ -252,36 +149,46 @@ def store_suggestion(
 
 
 def query_suggestions(task: str, top_k: int = 5) -> list[dict]:
-    """Query Chroma Cloud for relevant shortcuts using hybrid search."""
-    results = _hybrid_search(task, n_results=top_k)
+    """Query ChromaDB for relevant shortcuts given a task description."""
+    collection = _get_collection()
+
+    if collection.count() == 0:
+        return []
+
+    embedding = _embed_query(task)
+
+    results = collection.query(
+        query_embeddings=[embedding],
+        n_results=min(top_k, collection.count()),
+    )
 
     shortcuts = []
     for i, doc_id in enumerate(results["ids"][0]):
-        dist = results["distances"][0][i] if results["distances"][0] else 1.0
-        # Convert RRF distance to a 0-1 relevance score
-        # RRF scores are small positive numbers; normalize for display
-        relevance = max(0, min(1.0, 1.0 - (dist * 30)))  # Scale for RRF range
+        distance = results["distances"][0][i] if results["distances"] else 1.0
+        relevance = 1.0 - distance  # Convert distance to similarity
 
-        if relevance < 0.2:  # Skip low relevance
+        if relevance < 0.3:  # Skip low relevance
             continue
 
-        meta = results["metadatas"][0][i] if results["metadatas"][0] else {}
+        meta = results["metadatas"][0][i] if results["metadatas"] else {}
         shortcut = {
-            "id": doc_id,
-            "taskPattern": meta.get("task_pattern", ""),
-            "suggestion": meta.get("suggestion", ""),
-            "how": meta.get("how", ""),
-            "when": meta.get("when", ""),
-            "category": meta.get("category", "speed"),
-            "siteDomain": meta.get("site_domain", ""),
-            "estimatedImpact": meta.get("estimated_impact", "medium"),
-            "runCount": int(meta.get("run_count", "1")),
-            "successAssociations": int(meta.get("success_associations", "0")),
-            "sourceRunId": meta.get("source_run_id", ""),
-            "createdAt": meta.get("created_at", ""),
-            "updatedAt": meta.get("updated_at", ""),
-            "relevance": round(relevance, 3),
-        }
+                "id": doc_id,
+                "taskPattern": meta.get("task_pattern", ""),
+                "suggestion": meta.get("suggestion", ""),
+                "how": meta.get("how", ""),
+                "when": meta.get("when", ""),
+                "category": meta.get("category", "speed"),
+                "siteDomain": meta.get("site_domain", ""),
+                "estimatedImpact": meta.get("estimated_impact", "medium"),
+                "runCount": int(meta.get("run_count", "1")),
+                "successAssociations": int(
+                    meta.get("success_associations", "0")
+                ),
+                "sourceRunId": meta.get("source_run_id", ""),
+                "createdAt": meta.get("created_at", ""),
+                "updatedAt": meta.get("updated_at", ""),
+                "relevance": round(relevance, 3),
+            }
         if meta.get("ab_winner"):
             shortcut["abResult"] = _extract_ab_result(meta)
         shortcuts.append(shortcut)
@@ -312,20 +219,22 @@ def list_all_shortcuts(
     for i, doc_id in enumerate(results["ids"]):
         meta = results["metadatas"][i] if results["metadatas"] else {}
         shortcut = {
-            "id": doc_id,
-            "taskPattern": meta.get("task_pattern", ""),
-            "suggestion": meta.get("suggestion", ""),
-            "how": meta.get("how", ""),
-            "when": meta.get("when", ""),
-            "category": meta.get("category", "speed"),
-            "siteDomain": meta.get("site_domain", ""),
-            "estimatedImpact": meta.get("estimated_impact", "medium"),
-            "runCount": int(meta.get("run_count", "1")),
-            "successAssociations": int(meta.get("success_associations", "0")),
-            "sourceRunId": meta.get("source_run_id", ""),
-            "createdAt": meta.get("created_at", ""),
-            "updatedAt": meta.get("updated_at", ""),
-        }
+                "id": doc_id,
+                "taskPattern": meta.get("task_pattern", ""),
+                "suggestion": meta.get("suggestion", ""),
+                "how": meta.get("how", ""),
+                "when": meta.get("when", ""),
+                "category": meta.get("category", "speed"),
+                "siteDomain": meta.get("site_domain", ""),
+                "estimatedImpact": meta.get("estimated_impact", "medium"),
+                "runCount": int(meta.get("run_count", "1")),
+                "successAssociations": int(
+                    meta.get("success_associations", "0")
+                ),
+                "sourceRunId": meta.get("source_run_id", ""),
+                "createdAt": meta.get("created_at", ""),
+                "updatedAt": meta.get("updated_at", ""),
+            }
         if meta.get("ab_winner"):
             shortcut["abResult"] = _extract_ab_result(meta)
         shortcuts.append(shortcut)
@@ -357,7 +266,7 @@ def get_stats() -> dict:
 
 
 def search_shortcuts(query: str, top_k: int = 10) -> list[dict]:
-    """Semantic + keyword hybrid search across all shortcuts."""
+    """Semantic search across all shortcuts."""
     return query_suggestions(query, top_k=top_k)
 
 
@@ -384,6 +293,7 @@ def get_shortcut_by_id(shortcut_id: str) -> dict | None:
             "createdAt": meta.get("created_at", ""),
             "updatedAt": meta.get("updated_at", ""),
         }
+        # Include AB result if present
         if meta.get("ab_winner"):
             shortcut["abResult"] = _extract_ab_result(meta)
         return shortcut
@@ -399,6 +309,7 @@ def update_shortcut_ab_result(shortcut_id: str, ab_result: dict) -> bool:
         if not existing["ids"]:
             return False
         meta = existing["metadatas"][0] if existing["metadatas"] else {}
+        # ChromaDB metadata values must be str/int/float — flatten ABResult
         meta["ab_winner"] = ab_result["winner"]
         meta["ab_baseline_steps"] = str(ab_result["baselineSteps"])
         meta["ab_baseline_time_ms"] = str(ab_result["baselineTimeMs"])

@@ -14,9 +14,14 @@ Endpoints:
 import asyncio
 import base64
 import json
+import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
+
+logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -51,6 +56,12 @@ streamer = ScreenshotStreamer()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Warmup ChromaDB + Gemini Embedding API to eliminate cold-start latency
+    try:
+        query_suggestions("warmup", top_k=1)
+        logger.info("[startup] ChromaDB + embedding warmup complete")
+    except Exception:
+        logger.info("[startup] Warmup skipped (non-fatal)")
     yield
     await streamer.stop()
 
@@ -98,6 +109,13 @@ async def run_agent(req: RunAgentRequest):
     """Run the Gemini Live browser agent. Returns an SSE stream."""
 
     async def event_stream():
+        if req.shortcuts:
+            logger.info(f"[run-agent] {len(req.shortcuts)} shortcuts injected for task: {req.task[:80]!r}")
+            for i, sc in enumerate(req.shortcuts, 1):
+                logger.info(f"  shortcut {i}: {sc[:100]}")
+        else:
+            logger.info(f"[run-agent] No shortcuts for task: {req.task[:80]!r}")
+
         agent = GeminiLiveAgent(
             api_key=os.environ["GEMINI_API_KEY"],
             model=req.model,
@@ -169,13 +187,42 @@ async def observe(req: ObserveRequest):
         if frame:
             req.screenshot_base64 = base64.b64encode(frame).decode("utf-8")
     result = await observe_realtime(req)
+
+    # Auto-store real-time suggestions in Hub
+    if result.get("hasSuggestion") and result.get("suggestion"):
+        try:
+            domain = ""
+            # Extract domain from task or recent navigate steps
+            if req.steps:
+                for s in req.steps:
+                    action = s.get("action", {})
+                    if action.get("type") == "navigate" and action.get("action", ""):
+                        m = re.search(r'https?://(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', action["action"])
+                        if m:
+                            domain = m.group(1)
+                            break
+            store_result = store_suggestion(
+                task_pattern=req.task,
+                suggestion=result.get("suggestion", ""),
+                how=result.get("how", ""),
+                when=result.get("when", ""),
+                category=result.get("category", "speed"),
+                site_domain=domain,
+                estimated_impact="medium",
+            )
+            logger.info(f"[realtime] stored: {store_result.get('action', '?')} task_pattern={req.task[:60]!r}")
+        except Exception:
+            logger.exception("Failed to store real-time suggestion in Hub")
+
     return result
 
 
 @app.post("/api/observe/post-run")
 async def observe_after_run(req: PostRunObserveRequest):
     """Post-run observer — deep analysis of a completed run. Auto-stores suggestions in Hub."""
+    logger.info(f"[post-run] task={req.task!r} domain={req.domain!r} success={req.success} steps={len(req.all_steps)} time={req.total_time_ms}ms")
     result = await observe_post_run(req)
+    logger.info(f"[post-run] observer returned {len(result.get('suggestions', []))} suggestions")
 
     # Auto-store suggestions in ChromaDB
     stored = []
@@ -190,9 +237,10 @@ async def observe_after_run(req: PostRunObserveRequest):
                 site_domain=req.domain,
                 estimated_impact=s.get("estimatedImpact", "medium"),
             )
+            logger.info(f"[post-run] stored: {store_result.get('action', '?')} id={store_result.get('id', '?')} task_pattern={req.task[:60]!r}")
             stored.append(store_result)
         except Exception:
-            pass  # Storage failure is non-fatal
+            logger.exception("Failed to store post-run suggestion in Hub")
 
     result["stored"] = stored
     return result
@@ -232,6 +280,9 @@ async def hub_query_for_task(task: str = ""):
     if not task.strip():
         return {"shortcuts": []}
     results = query_suggestions(task, top_k=5)
+    logger.info(f"[hub-query] task={task[:60]!r} → {len(results)} shortcuts found")
+    for r in results:
+        logger.info(f"  [{r.get('category')}] {r.get('suggestion', '')[:50]} (relevance={r.get('relevance', 0):.3f})")
     return {"shortcuts": results}
 
 

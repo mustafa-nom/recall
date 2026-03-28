@@ -9,6 +9,7 @@ Both use Gemini 2.5 Pro (standard generateContent, not Live API).
 
 import base64
 import json
+import logging
 import os
 import uuid
 from typing import Optional
@@ -16,6 +17,8 @@ from typing import Optional
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 OBSERVER_MODEL = "gemini-2.5-flash"
 
@@ -151,20 +154,24 @@ async def observe_realtime(req: ObserveRequest) -> dict:
             )
         )
 
-    response = await client.aio.models.generate_content(
-        model=OBSERVER_MODEL,
-        contents=[
-            types.Content(
-                role="user",
-                parts=parts,
-            )
-        ],
-        config=types.GenerateContentConfig(
-            system_instruction=REALTIME_PROMPT,
-            temperature=0.3,
-            response_mime_type="application/json",
-        ),
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=OBSERVER_MODEL,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=parts,
+                )
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=REALTIME_PROMPT,
+                temperature=0.3,
+                response_mime_type="application/json",
+            ),
+        )
+    except Exception as e:
+        logger.warning(f"[realtime-observer] Gemini API error: {e}")
+        return {"hasSuggestion": False, "error": str(e)}
 
     try:
         result = json.loads(response.text)
@@ -209,20 +216,24 @@ async def observe_post_run(req: PostRunObserveRequest) -> dict:
         f"Full action log:\n{steps_text}"
     )
 
-    response = await client.aio.models.generate_content(
-        model=OBSERVER_MODEL,
-        contents=[
-            types.Content(
-                role="user",
-                parts=[types.Part(text=summary)],
-            )
-        ],
-        config=types.GenerateContentConfig(
-            system_instruction=POST_RUN_PROMPT,
-            temperature=0.3,
-            response_mime_type="application/json",
-        ),
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=OBSERVER_MODEL,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=summary)],
+                )
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=POST_RUN_PROMPT,
+                temperature=0.3,
+                response_mime_type="application/json",
+            ),
+        )
+    except Exception as e:
+        logger.warning(f"[post-run-observer] Gemini API error: {e}")
+        return {"suggestions": [], "error": str(e)}
 
     try:
         result = json.loads(response.text)

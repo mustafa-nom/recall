@@ -29,11 +29,12 @@ def _compute_ab_result(
     t_time = trained["timeMs"]
     t_success = trained["success"]
 
+    # Signed deltas: positive = trained used fewer steps or less time
     steps_saved = b_steps - t_steps
-    time_saved = b_time - t_time
+    time_saved_ms = b_time - t_time
 
-    # Improvement percentage (time-based)
-    if b_time > 0 and b_success:
+    # Time improvement vs baseline run (signed; negative means trained was slower)
+    if b_time > 0:
         improvement_pct = round((1 - t_time / b_time) * 100)
     else:
         improvement_pct = 0
@@ -66,9 +67,9 @@ def _compute_ab_result(
         "trainedTimeMs": t_time,
         "trainedSuccess": t_success,
         "winner": winner,
-        "improvementPct": max(improvement_pct, 0),
-        "stepsSaved": max(steps_saved, 0),
-        "timeSavedMs": max(time_saved, 0),
+        "improvementPct": improvement_pct,
+        "stepsSaved": steps_saved,
+        "timeSavedMs": time_saved_ms,
     }
 
 
