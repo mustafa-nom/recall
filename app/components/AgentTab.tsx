@@ -134,11 +134,36 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
   }, [updateStatus]);
 
   return (
-    <div className="flex flex-col h-full">
-      {status === "running" && <div className="running-bar" />}
+    <div className="flex-1 min-h-0 flex flex-col w-full bg-background overflow-hidden relative">
+      {status === "running" && <div className="running-bar absolute top-0 left-0 right-0 z-50" />}
 
-      <div className="flex flex-1 overflow-hidden p-5">
-        <div className="flex flex-col flex-1 gap-4 min-w-0 pb-6">
+      {/* Top Status Bar */}
+      <StatsBar
+        steps={steps.length}
+        timing={timing}
+        usage={usage}
+        shortcutsApplied={shortcutsApplied}
+        suggestions={suggestions.length}
+        status={status}
+      />
+
+      {/* Optional Message Overlay */}
+      {message && status !== "complete" && status !== "failed" && (
+        <div
+          className={`px-4 py-2 border-b border-border text-sm ${
+            message.type === "success"
+              ? "bg-success/5 text-success"
+              : "bg-error/5 text-error"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      {/* Main Content Area: 2-column flex */}
+      <div className="flex-1 min-h-0 flex divide-x divide-border overflow-hidden">
+        {/* Left Column (50%): Browser Preview */}
+        <div className="w-1/2 flex flex-col h-full min-h-0 min-w-0 bg-surface">
           <SessionViewer
             status={status}
             liveViewUrl={liveViewUrl}
@@ -147,35 +172,15 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
             stepCount={steps.length}
             totalTimeMs={timing.totalElapsedMs}
           />
+        </div>
 
-          <StatsBar
-            steps={steps.length}
-            timing={timing}
-            usage={usage}
-            shortcutsApplied={shortcutsApplied}
-            suggestions={suggestions.length}
-            status={status}
-          />
-
-          {message && status !== "complete" && status !== "failed" && (
-            <div
-              className={`animate-slide-in px-4 py-2.5 rounded-lg border-l-4 text-sm ${
-                message.type === "success"
-                  ? "bg-success/5 border-success text-success"
-                  : "bg-error/5 border-error text-error"
-              }`}
-            >
-              {message.text}
-            </div>
-          )}
-
-          <div className="flex flex-1 gap-4 min-h-[300px]">
-            <div className="flex-[3] min-w-0 overflow-hidden">
-              <StepFeed steps={steps} status={status} />
-            </div>
-            <div className="flex-[2] min-w-0 overflow-hidden">
-              <SuggestionsPanel suggestions={suggestions} status={status} />
-            </div>
+        {/* Right Column (50%): Feeds stacked */}
+        <div className="w-1/2 flex flex-col h-full min-h-0 min-w-0 divide-y divide-border overflow-hidden">
+          <div className="flex-1 min-h-0 bg-surface flex flex-col overflow-hidden">
+            <StepFeed steps={steps} status={status} />
+          </div>
+          <div className="flex-1 min-h-0 bg-surface flex flex-col overflow-hidden">
+            <SuggestionsPanel suggestions={suggestions} status={status} />
           </div>
         </div>
       </div>

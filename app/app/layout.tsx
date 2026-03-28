@@ -22,9 +22,9 @@ export const metadata: Metadata = {
   description:
     "A self-improving browser agent that learns from experience. Every run makes every future agent faster.",
   icons: {
-    icon: [{ url: "/recall-logo.svg", type: "image/svg+xml" }],
-    shortcut: "/recall-logo.svg",
-    apple: "/icon.svg",
+    icon: [{ url: "/recall-logo.png", type: "image/png" }],
+    shortcut: "/recall-logo.png",
+    apple: "/recall-logo.png",
   },
 };
 

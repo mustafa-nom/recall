@@ -95,7 +95,7 @@ export default function SuggestionsPanel({
   const count = suggestions.length;
 
   return (
-    <div className="card flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">

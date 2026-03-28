@@ -42,7 +42,7 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
             y = args.get("y", 0)
             desc = args.get("description", "")
             await page.mouse.click(x, y)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
             return {"status": "clicked", "description": desc, "x": x, "y": y}
 
         elif name == "type_text":
@@ -57,7 +57,7 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
         elif name == "press_key":
             key = args["key"]
             await page.keyboard.press(key)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
             return {"status": "pressed", "key": key}
 
         elif name == "scroll_page":
@@ -71,7 +71,7 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
         elif name == "extract_text":
             desc = args.get("description", "")
             text = await page.inner_text("body")
-            text = text[:2000] if len(text) > 2000 else text
+            text = text[:15000] if len(text) > 15000 else text
             return {"status": "extracted", "description": desc, "text": text}
 
         elif name == "task_complete":

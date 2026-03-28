@@ -351,6 +351,10 @@ class GeminiLiveAgent:
                                 if task_done:
                                     break
 
+                                try:
+                                    await page.wait_for_load_state("networkidle", timeout=3000)
+                                except Exception:
+                                    pass
                                 await asyncio.sleep(0.5)
                                 screenshot = await take_screenshot(page)
                                 if self.streamer and not use_cloud:

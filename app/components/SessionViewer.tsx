@@ -70,33 +70,50 @@ export default function SessionViewer({
   const isFailed = status === "failed";
 
   return (
-    <div className="session-viewer-frame rounded-xl overflow-hidden relative aspect-video w-full">
-      {/* Idle empty state */}
-      {isIdle && (
-        <div className="session-dot-grid absolute inset-0 flex flex-col items-center justify-center gap-3">
-          <div className="w-16 h-12 rounded-lg border-2 border-border-bright border-dashed flex items-center justify-center">
-            <svg
-              className="w-6 h-6 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
-              />
-            </svg>
-          </div>
-          <p className="text-sm font-medium text-text-secondary">
-            Browser preview
-          </p>
-          <p className="text-xs text-text-muted max-w-xs text-center">
-            Enter a task and hit Run to watch the agent work in real time
-          </p>
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0 bg-surface">
+        <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">
+          Browser preview
+        </h3>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-border bg-surface-raised">
+          <div
+            className={`h-2 w-2 rounded-full ${
+              isRunning ? "bg-accent animate-pulse" : isComplete ? "bg-success" : isFailed ? "bg-error" : "bg-text-muted opacity-50"
+            }`}
+          />
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-text-secondary">
+            {status}
+          </span>
         </div>
-      )}
+      </div>
+
+      <div className="flex-1 relative bg-surface-raised overflow-hidden">
+        {/* Idle empty state */}
+        {isIdle && (
+          <div className="session-dot-grid absolute inset-0 flex flex-col items-center justify-center gap-3">
+            <div className="w-16 h-12 rounded-lg border-2 border-border-bright border-dashed flex items-center justify-center">
+              <svg
+                className="w-6 h-6 text-text-muted"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
+                />
+              </svg>
+            </div>
+            <p className="text-xs font-medium text-text-secondary">
+              Browser preview
+            </p>
+            <p className="text-[11px] text-text-muted max-w-xs text-center">
+              Enter a task and hit Run to watch the agent work in real time
+            </p>
+          </div>
+        )}
 
       {/* Running — Browser Use Cloud iframe */}
       {isRunning && hasLiveUrl && (
@@ -114,7 +131,7 @@ export default function SessionViewer({
           <img
             ref={imgRef}
             alt="Browser session"
-            className="absolute inset-0 w-full h-full object-cover bg-black"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
           />
           <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-background/90 backdrop-blur-sm px-2 py-1 rounded-md border border-border">
             <div
@@ -129,14 +146,13 @@ export default function SessionViewer({
         </>
       )}
 
-      {/* Completion overlay */}
       {(isComplete || isFailed) && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface z-10">
           <div
             className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl ${
               isComplete
-                ? "bg-success/10 text-success"
-                : "bg-error/10 text-error"
+                ? "bg-success/10 text-success border border-success/20"
+                : "bg-error/10 text-error border border-error/20"
             }`}
           >
             {isComplete ? (
@@ -150,17 +166,17 @@ export default function SessionViewer({
             )}
           </div>
           <div className="text-center">
-            <p className="text-base font-semibold text-foreground">
+            <p className="text-sm font-semibold text-foreground uppercase tracking-wide">
               {isComplete ? "Session complete" : "Session failed"}
             </p>
             {completionMessage && (
-              <p className="text-sm text-text-secondary mt-1 max-w-md px-4 line-clamp-3">
+              <p className="text-xs text-text-secondary mt-1.5 max-w-md px-4 line-clamp-3">
                 {completionMessage}
               </p>
             )}
           </div>
           {(stepCount !== undefined || totalTimeMs !== undefined) && (
-            <div className="flex items-center gap-3 text-xs text-text-muted font-mono">
+            <div className="flex items-center gap-2 text-[11px] text-text-muted font-mono mt-1">
               {stepCount !== undefined && <span>{stepCount} steps</span>}
               {stepCount !== undefined && totalTimeMs !== undefined && <span>·</span>}
               {totalTimeMs !== undefined && (
@@ -170,6 +186,7 @@ export default function SessionViewer({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

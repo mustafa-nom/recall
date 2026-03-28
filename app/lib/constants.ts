@@ -1,5 +1,5 @@
 export const WORKER_URL =
-  process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_WORKER_URL || "http://127.0.0.1:8000";
 
 export const APP_NAME = "Recall";
 export const APP_DESCRIPTION =
