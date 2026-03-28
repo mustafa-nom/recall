@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import TaskInput from "./TaskInput";
 import SidePanel from "./SidePanel";
-import SessionViewer from "./SessionViewer";
+import SessionViewer, { BrowserPreviewPanelHeader } from "./SessionViewer";
 import StatsBar from "./StatsBar";
-import StepFeed from "./StepFeed";
+import StepFeed, { AgentStepsPanelHeader } from "./StepFeed";
 import SuggestionsPanel from "./SuggestionsPanel";
 import type {
   AgentStatus,
@@ -44,8 +44,17 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [liveViewUrl, setLiveViewUrl] = useState("");
+
+  // Refs that stay current — used by long-lived async callbacks
+  // to avoid stale closure bugs.
+  const taskRef = useRef(task);
+  const stepsRef = useRef(steps);
+  const timingRef = useRef(timing);
+
+  useEffect(() => { taskRef.current = task; }, [task]);
+  useEffect(() => { stepsRef.current = steps; }, [steps]);
+  useEffect(() => { timingRef.current = timing; }, [timing]);
 
   // Observer hook
   const handleSuggestion = useCallback((suggestion: Suggestion) => {
@@ -79,20 +88,25 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
     onStatusChange: (newStatus) => {
       updateStatus(newStatus);
       if (newStatus === "complete" || newStatus === "failed") {
-        const domain = extractDomain(task, steps);
+        // Read from refs to get current values (not stale closure)
+        const domain = extractDomain(taskRef.current, stepsRef.current);
         runPostRunAnalysis(
           domain,
           newStatus === "complete",
-          timing.totalElapsedMs
+          timingRef.current.totalElapsedMs
         );
       }
     },
     onStep: (step) => setSteps((prev) => [...prev, step]),
-    onTimingUpdate: setTiming,
+    onTimingUpdate: (newTiming) => {
+      // Update ref synchronously so it's current when onStatusChange
+      // reads it on the same tick (for agent_completed).
+      timingRef.current = newTiming;
+      setTiming(newTiming);
+    },
     onUsageUpdate: setUsage,
     onShortcutsApplied: setShortcutsApplied,
     onLiveViewUrl: setLiveViewUrl,
-    onScreenshot: setScreenshotUrl,
     onComplete: (success, msg) => {
       setMessage({ type: success ? "success" : "error", text: msg });
     },
@@ -103,11 +117,16 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
 
   const handleRun = useCallback(
     (taskText: string) => {
+      // Update refs synchronously so any callback that fires
+      // before the next render reads the right values.
+      taskRef.current = taskText;
+      stepsRef.current = [];
+      timingRef.current = { totalElapsedMs: 0, avgStepMs: 0 };
+
       setTask(taskText);
       setSteps([]);
       setSuggestions([]);
       setMessage(null);
-      setScreenshotUrl(null);
       setLiveViewUrl("");
       setShortcutsApplied(0);
       setTiming({ totalElapsedMs: 0, avgStepMs: 0 });
@@ -127,7 +146,6 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
     setSteps([]);
     setSuggestions([]);
     setMessage(null);
-    setScreenshotUrl(null);
     setLiveViewUrl("");
     setShortcutsApplied(0);
     setTiming({ totalElapsedMs: 0, avgStepMs: 0 });
@@ -141,6 +159,7 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
       {/* Top Status Bar */}
       <StatsBar
         steps={steps.length}
+        maxSteps={maxSteps}
         timing={timing}
         usage={usage}
         shortcutsApplied={shortcutsApplied}
@@ -162,28 +181,32 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
       )}
 
       {/* Main Content Area + optional SidePanel */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* 2-column layout: Browser left, Feeds right */}
-        <div className="flex-1 min-h-0 flex divide-x divide-border overflow-hidden">
-          {/* Left Column (50%): Browser Preview */}
-          <div className="w-1/2 flex flex-col h-full min-h-0 min-w-0 bg-surface">
-            <SessionViewer
-              status={status}
-              liveViewUrl={liveViewUrl}
-              screenshotUrl={screenshotUrl}
-              completionMessage={message?.text}
-              stepCount={steps.length}
-              totalTimeMs={timing.totalElapsedMs}
-            />
+      <div className="flex-1 min-h-0 flex flex-row overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0">
+          {/* One shared title row — aligned baselines and bottom border with Agent Steps */}
+          <div className="grid shrink-0 grid-cols-2 divide-x divide-border border-b border-border">
+            <BrowserPreviewPanelHeader status={status} />
+            <AgentStepsPanelHeader stepCount={steps.length} />
           </div>
 
-          {/* Right Column (50%): Feeds stacked */}
-          <div className="w-1/2 flex flex-col h-full min-h-0 min-w-0 divide-y divide-border overflow-hidden">
-            <div className="flex-1 min-h-0 bg-surface flex flex-col overflow-hidden">
-              <StepFeed steps={steps} status={status} />
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-2 divide-x divide-border overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface">
+              <SessionViewer
+                hideHeader
+                status={status}
+                liveViewUrl={liveViewUrl}
+                completionMessage={message?.text}
+                stepCount={steps.length}
+                totalTimeMs={timing.totalElapsedMs}
+              />
             </div>
-            <div className="flex-1 min-h-0 bg-surface flex flex-col overflow-hidden">
-              <SuggestionsPanel suggestions={suggestions} status={status} />
+            <div className="flex min-h-0 min-w-0 flex-col divide-y divide-border overflow-hidden">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
+                <StepFeed hideHeader steps={steps} status={status} />
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
+                <SuggestionsPanel suggestions={suggestions} status={status} />
+              </div>
             </div>
           </div>
         </div>
@@ -261,6 +284,7 @@ function extractDomain(task: string, steps?: AgentStep[]): string {
     linkedin: "linkedin.com",
     stackoverflow: "stackoverflow.com",
     "stack overflow": "stackoverflow.com",
+    "hacker news": "news.ycombinator.com",
   };
 
   const lower = task.toLowerCase();

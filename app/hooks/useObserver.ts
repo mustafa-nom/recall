@@ -24,6 +24,13 @@ export function useObserver({
   const stepsRef = useRef<AgentStep[]>([]);
   const runStartRef = useRef<number>(0);
 
+  // Ref for task so runPostRunAnalysis always reads the current value,
+  // even when called from a stale closure.
+  const taskRef = useRef(task);
+  useEffect(() => {
+    taskRef.current = task;
+  }, [task]);
+
   // Keep steps ref up to date
   useEffect(() => {
     stepsRef.current = steps;
@@ -90,17 +97,18 @@ export function useObserver({
     }
   }, [status, task, onSuggestion]);
 
-  // Post-run analysis
+  // Post-run analysis — uses taskRef to avoid stale closure
   const runPostRunAnalysis = useCallback(
     async (domain: string, success: boolean, totalTimeMs: number) => {
-      if (stepsRef.current.length === 0) return;
+      const currentTask = taskRef.current;
+      if (stepsRef.current.length === 0 || !currentTask) return;
 
       try {
         const res = await fetch(`${WORKER_URL}/api/observe/post-run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            task,
+            task: currentTask,
             domain,
             all_steps: stepsRef.current.map((s) => ({
               stepIndex: s.index,
@@ -157,7 +165,7 @@ export function useObserver({
         // Post-run analysis failure is non-fatal
       }
     },
-    [task, onPostRunSuggestions]
+    [onPostRunSuggestions] // No task dependency — reads from taskRef
   );
 
   return { runPostRunAnalysis };

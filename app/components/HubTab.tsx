@@ -5,125 +5,7 @@ import type { HubShortcut, HubStats, ABResult, ABTestStatus, AgentStep } from "@
 import { WORKER_URL, DEFAULT_MODEL, DEFAULT_MAX_STEPS } from "@/lib/constants";
 import { useABTestStream } from "@/hooks/useABTestStream";
 
-const EXAMPLE_SHORTCUTS: HubShortcut[] = [
-  {
-    id: "example-1",
-    taskPattern: "Search for flights on Google Flights",
-    suggestion: "Use direct URL with query parameters",
-    how: "Navigate directly to google.com/travel/flights?q=SFO+to+JFK instead of searching through the Google homepage and clicking through menus.",
-    when: "When the task involves searching for flights on Google",
-    category: "speed",
-    siteDomain: "google.com/flights",
-    estimatedImpact: "high",
-    runCount: 12,
-    successAssociations: 10,
-    createdAt: "1711500000",
-    updatedAt: "1711500000",
-    status: "verified",
-  },
-  {
-    id: "example-2",
-    taskPattern: "Find a GitHub repository by topic",
-    suggestion: "Use GitHub search URL directly",
-    how: "Press Ctrl+L to focus address bar, then type github.com/search?q=<query>&type=repositories to skip the homepage entirely.",
-    when: "When navigating to GitHub to search for repos",
-    category: "speed",
-    siteDomain: "github.com",
-    estimatedImpact: "medium",
-    runCount: 8,
-    successAssociations: 7,
-    createdAt: "1711400000",
-    updatedAt: "1711400000",
-  },
-  {
-    id: "example-3",
-    taskPattern: "Compare product reviews on Amazon",
-    suggestion: "Use CSS selector for star rating filter",
-    how: "After search, click the 4+ star filter directly instead of scrolling through results manually. Target the ratings filter sidebar element.",
-    when: "When comparing products by rating on Amazon",
-    category: "accuracy",
-    siteDomain: "amazon.com",
-    estimatedImpact: "high",
-    runCount: 15,
-    successAssociations: 13,
-    createdAt: "1711300000",
-    updatedAt: "1711300000",
-    status: "verified",
-  },
-  {
-    id: "example-4",
-    taskPattern: "Find trending posts on Reddit",
-    suggestion: "Navigate to subreddit sort URL directly",
-    how: "Use reddit.com/r/<subreddit>/top/?t=day instead of navigating to the subreddit and clicking sort options.",
-    when: "When looking for top/trending content on a specific subreddit",
-    category: "speed",
-    siteDomain: "reddit.com",
-    estimatedImpact: "medium",
-    runCount: 6,
-    successAssociations: 5,
-    createdAt: "1711200000",
-    updatedAt: "1711200000",
-  },
-  {
-    id: "example-5",
-    taskPattern: "Look up a research paper on arxiv",
-    suggestion: "Use arxiv search API URL pattern",
-    how: "Navigate to arxiv.org/search/?query=<topic>&searchtype=all to skip the homepage form submission step.",
-    when: "When searching for papers on arxiv by topic",
-    category: "speed",
-    siteDomain: "arxiv.org",
-    estimatedImpact: "medium",
-    runCount: 9,
-    successAssociations: 8,
-    createdAt: "1711100000",
-    updatedAt: "1711100000",
-  },
-  {
-    id: "example-6",
-    taskPattern: "Extract data from a Wikipedia article",
-    suggestion: "Target infobox table for structured data",
-    how: "Instead of reading the full article, extract from the .infobox table element which contains structured key-value data.",
-    when: "When extracting facts like population, area, or dates from Wikipedia",
-    category: "accuracy",
-    siteDomain: "wikipedia.org",
-    estimatedImpact: "high",
-    runCount: 11,
-    successAssociations: 9,
-    createdAt: "1711000000",
-    updatedAt: "1711000000",
-    status: "verified",
-  },
-  {
-    id: "example-7",
-    taskPattern: "Find directions on Google Maps",
-    suggestion: "Use Google Maps URL with origin and destination",
-    how: "Navigate to google.com/maps/dir/<origin>/<destination> to skip the search and direction input steps entirely.",
-    when: "When the task asks for directions between two locations",
-    category: "speed",
-    siteDomain: "maps.google.com",
-    estimatedImpact: "high",
-    runCount: 7,
-    successAssociations: 6,
-    createdAt: "1710900000",
-    updatedAt: "1710900000",
-  },
-  {
-    id: "example-8",
-    taskPattern: "Check LinkedIn profile details",
-    suggestion: "Reduce unnecessary scroll actions",
-    how: "Extract visible profile data before scrolling. Only scroll if the required information is below the fold.",
-    when: "When the task involves reading a LinkedIn profile page",
-    category: "cost",
-    siteDomain: "linkedin.com",
-    estimatedImpact: "low",
-    runCount: 4,
-    successAssociations: 3,
-    createdAt: "1710800000",
-    updatedAt: "1710800000",
-  },
-];
-
-export default function HubTab() {
+export default function HubTab({ active }: { active?: boolean }) {
   const [shortcuts, setShortcuts] = useState<HubShortcut[]>([]);
   const [stats, setStats] = useState<HubStats | null>(null);
   const [search, setSearch] = useState("");
@@ -135,6 +17,14 @@ export default function HubTab() {
     fetchShortcuts();
     fetchStats();
   }, []);
+
+  // Re-fetch when tab becomes active (picks up new suggestions from completed runs)
+  useEffect(() => {
+    if (active) {
+      fetchShortcuts();
+      fetchStats();
+    }
+  }, [active]);
 
   async function fetchShortcuts() {
     try {
@@ -169,11 +59,7 @@ export default function HubTab() {
     return matchesSearch && matchesCategory;
   };
 
-  const filtered = shortcuts
-    .filter((s) => !s.siteDomain?.includes("ycombinator") && !s.suggestion.toLowerCase().includes("ycombinator"))
-    .filter(matchesFilters);
-  const filteredExamples = EXAMPLE_SHORTCUTS.filter(matchesFilters);
-  const allShortcuts = [...filtered, ...filteredExamples];
+  const filtered = shortcuts.filter(matchesFilters);
 
   if (selected) {
     return <ShortcutDetail shortcut={selected} onBack={() => setSelected(null)} />;
@@ -186,7 +72,7 @@ export default function HubTab() {
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-foreground">Agent Hub</h2>
           <span className="text-xs text-text-muted font-mono">
-            {allShortcuts.length} {allShortcuts.length === 1 ? "shortcut" : "shortcuts"} found
+            {filtered.length} {filtered.length === 1 ? "shortcut" : "shortcuts"}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -238,16 +124,17 @@ export default function HubTab() {
               ))}
             </div>
           </div>
-        ) : allShortcuts.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="session-dot-grid flex flex-col items-center justify-center h-40 rounded-xl text-text-muted gap-2">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
             </svg>
-            <p className="text-xs">No shortcuts found</p>
+            <p className="text-xs font-medium text-text-secondary">No shortcuts yet</p>
+            <p className="text-[11px] text-text-muted">Run your first task to start learning</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {allShortcuts.map((shortcut) => (
+            {filtered.map((shortcut) => (
               <ShortcutCard key={shortcut.id} shortcut={shortcut} onClick={() => setSelected(shortcut)} />
             ))}
           </div>
@@ -365,6 +252,55 @@ function ShortcutCard({ shortcut, onClick }: { shortcut: HubShortcut; onClick: (
   );
 }
 
+function formatStepDelta(stepsSaved: number): string | undefined {
+  if (stepsSaved === 0) return undefined;
+  if (stepsSaved > 0) return `${stepsSaved} fewer`;
+  return `${-stepsSaved} more`;
+}
+
+function formatTimeDelta(timeSavedMs: number): string | undefined {
+  if (timeSavedMs === 0) return undefined;
+  const s = Math.abs(timeSavedMs) / 1000;
+  if (timeSavedMs > 0) return `${s.toFixed(1)}s faster`;
+  return `${s.toFixed(1)}s slower`;
+}
+
+function formatStepDeltaSummary(stepsSaved: number): string {
+  if (stepsSaved === 0) return "Same";
+  if (stepsSaved > 0) return `${stepsSaved} fewer`;
+  return `${-stepsSaved} more`;
+}
+
+function formatTimeDeltaSummary(timeSavedMs: number): string {
+  if (timeSavedMs === 0) return "Same";
+  const s = Math.abs(timeSavedMs) / 1000;
+  if (timeSavedMs > 0) return `${s.toFixed(1)}s faster`;
+  return `${s.toFixed(1)}s slower`;
+}
+
+/** Human-readable summary when the trained agent wins an A/B run. */
+function trainedWinSummary(ab: ABResult): string {
+  if (!ab.baselineSuccess && ab.trainedSuccess) {
+    return "Trained agent won — completed the task while baseline did not.";
+  }
+  const faster = ab.improvementPct > 0 ? `${ab.improvementPct}% faster` : null;
+  const fewerSteps =
+    ab.stepsSaved > 0
+      ? `${ab.stepsSaved} fewer step${ab.stepsSaved === 1 ? "" : "s"}`
+      : null;
+  if (faster && fewerSteps) {
+    return `Trained agent won — ${faster}, ${fewerSteps}.`;
+  }
+  if (faster) {
+    return `Trained agent won — ${faster}.`;
+  }
+  if (fewerSteps) {
+    const slower = ab.improvementPct < 0 ? ` (${-ab.improvementPct}% longer)` : "";
+    return `Trained agent won — ${fewerSteps}${slower}.`;
+  }
+  return "Trained agent won — see comparison below.";
+}
+
 // --- Detail View ---
 
 function ShortcutDetail({ shortcut, onBack }: { shortcut: HubShortcut; onBack: () => void }) {
@@ -401,6 +337,8 @@ function ShortcutDetail({ shortcut, onBack }: { shortcut: HubShortcut; onBack: (
   const hasAB = !!ab;
   const isRunning = abStatus === "baseline_running" || abStatus === "trained_running";
   const domain = displayDomain(shortcut.siteDomain);
+  const abRecoveryWin =
+    !!ab && !ab.baselineSuccess && ab.trainedSuccess && ab.winner === "trained";
 
   return (
     <div className="flex flex-col h-full p-5 gap-5 overflow-y-auto animate-slide-in">
@@ -577,7 +515,7 @@ function ShortcutDetail({ shortcut, onBack }: { shortcut: HubShortcut; onBack: (
               }`}
             >
               {ab.winner === "trained" ? (
-                <>Trained agent won — {ab.improvementPct}% faster, saved {ab.stepsSaved} steps</>
+                <>{trainedWinSummary(ab)}</>
               ) : ab.winner === "baseline" ? (
                 <>Baseline agent performed better on this task</>
               ) : (
@@ -606,28 +544,64 @@ function ShortcutDetail({ shortcut, onBack }: { shortcut: HubShortcut; onBack: (
                   )}
                 </div>
                 <div className="space-y-3">
-                  <ComparisonMetric label="Steps" value={ab.trainedSteps} isBetter={ab.trainedSteps < ab.baselineSteps} delta={ab.stepsSaved > 0 ? `-${ab.stepsSaved}` : undefined} />
-                  <ComparisonMetric label="Time" value={`${(ab.trainedTimeMs / 1000).toFixed(1)}s`} isBetter={ab.trainedTimeMs < ab.baselineTimeMs} delta={ab.timeSavedMs > 0 ? `-${(ab.timeSavedMs / 1000).toFixed(1)}s` : undefined} />
+                  <ComparisonMetric
+                    label="Steps"
+                    value={ab.trainedSteps}
+                    isBetter={ab.trainedSteps < ab.baselineSteps}
+                    delta={formatStepDelta(ab.stepsSaved)}
+                  />
+                  <ComparisonMetric
+                    label="Time"
+                    value={`${(ab.trainedTimeMs / 1000).toFixed(1)}s`}
+                    isBetter={ab.trainedTimeMs < ab.baselineTimeMs}
+                    delta={formatTimeDelta(ab.timeSavedMs)}
+                  />
                   <ComparisonMetric label="Success" value={ab.trainedSuccess ? "Yes" : "No"} isBetter={ab.trainedSuccess && !ab.baselineSuccess} />
                 </div>
               </div>
             </div>
 
             {ab.winner === "trained" && (
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-center">
-                  <p className="text-[10px] text-text-muted uppercase">Steps Saved</p>
-                  <p className="text-lg font-semibold text-success stat-value">{ab.stepsSaved}</p>
+              abRecoveryWin ? (
+                <div className="mt-4 rounded-lg bg-success/5 border border-success/20 px-4 py-3 text-sm text-text-secondary text-center">
+                  Baseline did not finish successfully, so time and step &quot;savings&quot; are not comparable.
+                  The shortcut still proved its value by completing the task.
                 </div>
-                <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-center">
-                  <p className="text-[10px] text-text-muted uppercase">Time Saved</p>
-                  <p className="text-lg font-semibold text-success stat-value">{(ab.timeSavedMs / 1000).toFixed(1)}s</p>
+              ) : (
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-center">
+                    <p className="text-[10px] text-text-muted uppercase">Step Δ (vs baseline)</p>
+                    <p
+                      className={`text-lg font-semibold stat-value ${
+                        ab.stepsSaved > 0 ? "text-success" : ab.stepsSaved < 0 ? "text-warning" : "text-foreground"
+                      }`}
+                    >
+                      {formatStepDeltaSummary(ab.stepsSaved)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-center">
+                    <p className="text-[10px] text-text-muted uppercase">Time Δ (vs baseline)</p>
+                    <p
+                      className={`text-lg font-semibold stat-value ${
+                        ab.timeSavedMs > 0 ? "text-success" : ab.timeSavedMs < 0 ? "text-warning" : "text-foreground"
+                      }`}
+                    >
+                      {formatTimeDeltaSummary(ab.timeSavedMs)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-center">
+                    <p className="text-[10px] text-text-muted uppercase">Runtime vs baseline</p>
+                    <p
+                      className={`text-lg font-semibold stat-value ${
+                        ab.improvementPct > 0 ? "text-success" : ab.improvementPct < 0 ? "text-warning" : "text-foreground"
+                      }`}
+                    >
+                      {ab.improvementPct > 0 ? "+" : ""}
+                      {ab.improvementPct}%
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-center">
-                  <p className="text-[10px] text-text-muted uppercase">Improvement</p>
-                  <p className="text-lg font-semibold text-success stat-value">{ab.improvementPct}%</p>
-                </div>
-              </div>
+              )
             )}
           </>
         ) : !isRunning && abStatus !== "failed" ? (

@@ -1,10 +1,12 @@
 "use client";
 
 import type { AgentStatus, AgentTiming, AgentUsage } from "@/lib/types";
-import { DEFAULT_MAX_STEPS } from "@/lib/constants";
 
 interface StatsBarProps {
+  /** Number of browser/tool actions recorded this run */
   steps: number;
+  /** Configured per-run cap (same value sent to the worker) */
+  maxSteps: number;
   timing: AgentTiming;
   usage: AgentUsage;
   shortcutsApplied: number;
@@ -22,14 +24,19 @@ function StatPill({
   value,
   sub,
   icon,
+  title,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   icon: React.ReactNode;
+  title?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-2.5 px-2 text-center">
+    <div
+      className="flex flex-col items-center justify-center py-2.5 px-2 text-center"
+      title={title}
+    >
       <div className="flex items-center gap-1 mb-0.5">
         <div className="text-text-muted opacity-70 scale-75">{icon}</div>
         <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">
@@ -48,6 +55,7 @@ function StatPill({
 
 export default function StatsBar({
   steps,
+  maxSteps,
   timing,
   shortcutsApplied,
   suggestions,
@@ -58,9 +66,14 @@ export default function StatsBar({
   return (
     <div className={`grid grid-cols-5 divide-x divide-border w-full border-b border-border border-t bg-surface shrink-0 ${isActive ? "animate-slide-in" : ""}`}>
       <StatPill
-        label="Steps"
+        label="Actions"
+        title={
+          isActive
+            ? `First number: browser actions taken. "${maxSteps} turns" is the run budget (agent loop limit), not an action quota.`
+            : undefined
+        }
         value={isActive ? steps : "—"}
-        sub={isActive ? `/ ${DEFAULT_MAX_STEPS}` : undefined}
+        sub={isActive ? `${maxSteps} turns` : undefined}
         icon={
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />

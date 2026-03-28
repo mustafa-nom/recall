@@ -25,12 +25,9 @@ interface TaskInputProps {
 const MAX_CHARS = 1000;
 
 export const PLACEHOLDER_SUGGESTIONS = [
+  "Find the highest rated restaurant in Los Angeles on Google Maps...",
   "Compare flight prices from SF to Tokyo on Google Flights...",
-  "Find the top-rated Italian restaurant in Manhattan on Google Maps...",
-  "Search GitHub for the most starred AI agent frameworks...",
-  "Find the latest multi-modal AI paper on arxiv...",
-  "Look up the best noise-canceling headphones on Amazon...",
-  "Find today's trending TypeScript repos on GitHub...",
+  "Search Wikipedia for \"artificial intelligence\" and summarize the first paragraph...",
 ];
 
 export default function TaskInput({
@@ -50,6 +47,7 @@ export default function TaskInput({
   const [placeholderVisible, setPlaceholderVisible] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wasRunningRef = useRef(false);
 
   const isRunning = status === "running";
   const isDone = status === "complete" || status === "failed";
@@ -119,15 +117,21 @@ export default function TaskInput({
     }
   }, [expanded]);
 
-  // Force expand when running
+  // After a run ends (complete, cancel, fail), restore the wide pill for the next task
   useEffect(() => {
-    if (isRunning) setExpanded(true);
+    if (wasRunningRef.current && !isRunning) {
+      setExpanded(true);
+    }
+    wasRunningRef.current = isRunning;
   }, [isRunning]);
 
   const containerClass = [
     "task-input-container",
-    expanded ? "task-expanded" : "task-collapsed",
-    isRunning ? "task-running" : "",
+    isRunning
+      ? "task-running-minimal"
+      : expanded
+        ? "task-expanded"
+        : "task-collapsed",
   ]
     .filter(Boolean)
     .join(" ");
@@ -137,16 +141,35 @@ export default function TaskInput({
       ref={containerRef}
       className={containerClass}
       onMouseEnter={() => {
-        if (!expanded) setExpanded(true);
+        if (!isRunning && !expanded) setExpanded(true);
       }}
     >
-      {/* Collapsed icon */}
-      <div className="task-input-icon" aria-hidden={expanded}>
-        <RecallMark className="h-4 w-8 text-accent shrink-0" aria-hidden />
-      </div>
+      {isRunning ? (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-error/10 text-error transition-all hover:bg-error/20 active:scale-95"
+          aria-label="Cancel running task"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden
+          >
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        </button>
+      ) : (
+        <>
+          {/* Collapsed icon */}
+          <div className="task-input-icon" aria-hidden={expanded}>
+            <RecallMark className="h-10 w-auto text-accent shrink-0" aria-hidden />
+          </div>
 
-      {/* Expanded bar */}
-      <div className="task-input-bar">
+          {/* Expanded bar */}
+          <div className="task-input-bar">
         {/* Settings icon with shadcn popover */}
         <div className="shrink-0">
           <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -266,47 +289,31 @@ export default function TaskInput({
             </button>
           )}
 
-          {isRunning ? (
-            <button
-              onClick={onCancel}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-error/10 text-error hover:bg-error/20 active:scale-95 transition-all"
-              aria-label="Cancel running task"
-              tabIndex={expanded ? 0 : -1}
+          <button
+            onClick={handleSubmit}
+            disabled={!task.trim()}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-dim active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Run agent"
+            tabIndex={expanded ? 0 : -1}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={!task.trim()}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-dim active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              aria-label="Run agent"
-              tabIndex={expanded ? 0 : -1}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
-            </button>
-          )}
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

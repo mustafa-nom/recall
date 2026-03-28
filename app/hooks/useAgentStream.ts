@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import type {
   AgentStatus,
   AgentStep,
@@ -25,6 +25,13 @@ interface UseAgentStreamOptions {
 export function useAgentStream(options: UseAgentStreamOptions) {
   const abortRef = useRef<AbortController | null>(null);
 
+  // Keep options in a ref so the long-running SSE loop always reads
+  // the latest callbacks, avoiding stale closure bugs.
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  });
+
   const startRun = useCallback(
     async (task: string, model: string, maxSteps: number) => {
       if (abortRef.current) {
@@ -34,7 +41,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      options.onStatusChange("running");
+      optionsRef.current.onStatusChange("running");
 
       try {
         const res = await fetch("/api/run-agent", {
@@ -51,23 +58,24 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         for await (const event of parseSSEStream<SSEEvent>(res)) {
           if (controller.signal.aborted) break;
 
+          const opts = optionsRef.current;
+
           switch (event.type) {
             case "session_created":
               if (event.liveViewUrl) {
-                options.onLiveViewUrl?.(event.liveViewUrl);
+                opts.onLiveViewUrl?.(event.liveViewUrl);
               }
               break;
 
             case "agent_started":
-              options.onShortcutsApplied(event.shortcutsApplied);
-              // Agent started may also carry liveViewUrl
+              opts.onShortcutsApplied(event.shortcutsApplied);
               if ("liveViewUrl" in event && (event as Record<string, unknown>).liveViewUrl) {
-                options.onLiveViewUrl?.((event as Record<string, unknown>).liveViewUrl as string);
+                opts.onLiveViewUrl?.((event as Record<string, unknown>).liveViewUrl as string);
               }
               break;
 
             case "step_progress":
-              options.onStep({
+              opts.onStep({
                 index: event.stepIndex,
                 action: event.action.type,
                 description: event.action.action,
@@ -76,37 +84,37 @@ export function useAgentStream(options: UseAgentStreamOptions) {
                 cumulativeTimeMs: event.timing.totalElapsedMs,
                 shortcutApplied: event.shortcutApplied,
               });
-              options.onTimingUpdate({
+              opts.onTimingUpdate({
                 totalElapsedMs: event.timing.totalElapsedMs,
                 avgStepMs: event.timing.totalElapsedMs / (event.stepIndex + 1),
               });
               break;
 
             case "agent_completed":
-              options.onTimingUpdate(event.timing);
-              options.onUsageUpdate(event.usage);
-              options.onComplete(event.success, event.message);
-              options.onStatusChange(event.success ? "complete" : "failed");
+              opts.onTimingUpdate(event.timing);
+              opts.onUsageUpdate(event.usage);
+              opts.onComplete(event.success, event.message);
+              opts.onStatusChange(event.success ? "complete" : "failed");
               break;
 
             case "agent_error":
-              options.onError(event.error);
-              options.onStatusChange("failed");
+              opts.onError(event.error);
+              opts.onStatusChange("failed");
               break;
           }
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") {
-          options.onStatusChange("cancelled");
+          optionsRef.current.onStatusChange("cancelled");
         } else {
           const message =
             err instanceof Error ? err.message : "Unknown error";
-          options.onError(message);
-          options.onStatusChange("failed");
+          optionsRef.current.onError(message);
+          optionsRef.current.onStatusChange("failed");
         }
       }
     },
-    [options]
+    [] // Stable identity — reads from optionsRef.current
   );
 
   const cancelRun = useCallback(() => {

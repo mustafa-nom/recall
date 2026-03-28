@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { AgentStatus, AgentStep } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface StepFeedProps {
   steps: AgentStep[];
@@ -94,7 +95,37 @@ function StepCard({
   );
 }
 
-export default function StepFeed({ steps, status }: StepFeedProps) {
+export function AgentStepsPanelHeader({
+  stepCount,
+  className,
+}: {
+  stepCount: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn("panel-header-row min-w-0", className)}>
+      <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">
+        Agent Steps
+      </h3>
+      {stepCount > 0 && (
+        <span className="text-[10px] font-mono text-text-muted">
+          {stepCount} {stepCount === 1 ? "step" : "steps"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface StepFeedPropsWithHeader extends StepFeedProps {
+  /** When true, title row is omitted (rendered in AgentTab shared header row). */
+  hideHeader?: boolean;
+}
+
+export default function StepFeed({
+  steps,
+  status,
+  hideHeader = false,
+}: StepFeedPropsWithHeader) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -104,19 +135,15 @@ export default function StepFeed({ steps, status }: StepFeedProps) {
   }, [steps.length]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">
-          Agent Steps
-        </h3>
-        {steps.length > 0 && (
-          <span className="text-[10px] font-mono text-text-muted">
-            {steps.length} {steps.length === 1 ? "step" : "steps"}
-          </span>
-        )}
-      </div>
+    <div className="flex h-full flex-col overflow-hidden">
+      {!hideHeader && (
+        <AgentStepsPanelHeader
+          stepCount={steps.length}
+          className="border-b border-border"
+        />
+      )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-3">
         {steps.length === 0 && status === "idle" && (
           <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3">
             <svg className="w-8 h-8 text-border-bright" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

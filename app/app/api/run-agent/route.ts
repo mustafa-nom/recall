@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const hubRes = await fetch(
       `${WORKER_URL}/api/hub/query?task=${encodeURIComponent(body.task)}`,
-      { signal: AbortSignal.timeout(3000) }
+      { signal: AbortSignal.timeout(8000) }
     );
     if (hubRes.ok) {
       const hubData = await hubRes.json();
@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
   } catch {
     // Hub query failure is non-fatal — run without shortcuts
   }
+
+  console.log(`[run-agent] Task: "${body.task?.slice(0, 60)}" → ${shortcuts.length} shortcuts injected`);
 
   // Proxy to Python worker with shortcuts injected
   const workerRes = await fetch(`${WORKER_URL}/api/run-agent`, {
