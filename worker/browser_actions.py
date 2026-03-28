@@ -75,7 +75,7 @@ async def execute_action(page: Page, name: str, args: dict) -> dict:
         elif name == "extract_text":
             desc = args.get("description", "")
             text = await page.inner_text("body")
-            text = text[:2000] if len(text) > 2000 else text
+            text = text[:15000] if len(text) > 15000 else text
             return {"status": "extracted", "description": desc, "text": text}
 
         elif name == "task_complete":

@@ -29,18 +29,18 @@ function StatPill({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border shadow-sm">
-      <div className="text-text-muted">{icon}</div>
-      <div className="flex flex-col">
-        <span className="text-[10px] font-medium text-text-muted uppercase">
+    <div className="flex flex-col items-center justify-center py-2.5 px-2 text-center">
+      <div className="flex items-center gap-1 mb-0.5">
+        <div className="text-text-muted opacity-70 scale-75">{icon}</div>
+        <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">
           {label}
         </span>
-        <div className="flex items-baseline gap-1">
-          <span className="text-sm font-semibold stat-value">{value}</span>
-          {sub && (
-            <span className="text-[10px] text-text-muted font-mono">{sub}</span>
-          )}
-        </div>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[15px] font-bold text-foreground">{value}</span>
+        {sub && (
+          <span className="text-[10px] text-text-muted font-mono">{sub}</span>
+        )}
       </div>
     </div>
   );
@@ -56,7 +56,7 @@ export default function StatsBar({
   const isActive = status === "running" || status === "complete" || status === "failed";
 
   return (
-    <div className={`grid grid-cols-5 gap-2 ${isActive ? "animate-slide-in" : ""}`}>
+    <div className={`grid grid-cols-5 divide-x divide-border w-full border-b border-border border-t bg-surface shrink-0 ${isActive ? "animate-slide-in" : ""}`}>
       <StatPill
         label="Steps"
         value={isActive ? steps : "—"}

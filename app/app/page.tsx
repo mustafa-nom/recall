@@ -14,12 +14,12 @@ export default function Home() {
     <div className="relative z-10 flex flex-col h-screen overflow-hidden font-sans">
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-3 border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="flex items-baseline gap-2.5 min-w-0">
-          <RecallMark className="h-7 w-auto text-accent self-center shrink-0" aria-hidden />
+        <div className="flex items-center min-w-0">
+          <RecallMark className="h-12 w-auto text-accent shrink-0 -mx-3" aria-hidden />
           <span className="text-[15px] font-bold tracking-wide uppercase text-foreground shrink-0">
             Recall
           </span>
-          <span className="text-[11px] text-text-muted font-medium hidden sm:inline truncate">
+          <span className="text-[11px] text-text-muted font-medium hidden sm:inline truncate ml-2.5">
             Self-Improving Browser Agent
           </span>
         </div>
@@ -49,7 +49,7 @@ export default function Home() {
       </header>
 
       {/* Tab Content */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {activeTab === "agent" && <AgentTab />}
         {activeTab === "hub" && <HubTab />}
       </main>

@@ -255,7 +255,7 @@ class GeminiLiveAgent:
                 ) as session:
                     # Initial screenshot + task
                     screenshot = await take_screenshot(page)
-                    if self.streamer:
+                    if self.streamer and not use_cloud:
                         await self.streamer.broadcast(screenshot)
 
                     await session.send_client_content(
@@ -389,9 +389,13 @@ class GeminiLiveAgent:
                                         )
                                         print(f"[loop-detect] Warning injected: '{most_common_sig}' repeated {most_common_count}x")
 
+                                try:
+                                    await page.wait_for_load_state("networkidle", timeout=3000)
+                                except Exception:
+                                    pass
                                 await asyncio.sleep(0.5)
                                 screenshot = await take_screenshot(page)
-                                if self.streamer:
+                                if self.streamer and not use_cloud:
                                     await self.streamer.broadcast(screenshot)
 
                                 screenshot_text = "Here is the updated screenshot after the action."
