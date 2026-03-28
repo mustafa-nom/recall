@@ -18,11 +18,13 @@ interface TaskInputProps {
   onRun: (task: string) => void;
   onCancel: () => void;
   onReset: () => void;
+  onSwitchToSidePanel?: () => void;
+  initialExpanded?: boolean;
 }
 
 const MAX_CHARS = 1000;
 
-const PLACEHOLDER_SUGGESTIONS = [
+export const PLACEHOLDER_SUGGESTIONS = [
   "Compare flight prices from SF to Tokyo on Google Flights...",
   "Find the top-rated Italian restaurant in Manhattan on Google Maps...",
   "Search GitHub for the most starred AI agent frameworks...",
@@ -38,9 +40,11 @@ export default function TaskInput({
   onRun,
   onCancel,
   onReset,
+  onSwitchToSidePanel,
+  initialExpanded = false,
 }: TaskInputProps) {
   const [task, setTask] = useState("");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initialExpanded);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [placeholderVisible, setPlaceholderVisible] = useState(true);
@@ -243,6 +247,22 @@ export default function TaskInput({
               tabIndex={expanded ? 0 : -1}
             >
               Reset
+            </button>
+          )}
+
+          {/* Side panel toggle */}
+          {onSwitchToSidePanel && (
+            <button
+              onClick={onSwitchToSidePanel}
+              className="w-8 h-8 flex items-center justify-center rounded-full text-text-secondary hover:bg-surface-raised hover:text-foreground transition-colors"
+              aria-label="Switch to side panel"
+              title="Switch to side panel"
+              tabIndex={expanded ? 0 : -1}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
             </button>
           )}
 

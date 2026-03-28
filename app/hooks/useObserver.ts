@@ -8,7 +8,6 @@ interface UseObserverOptions {
   status: AgentStatus;
   task: string;
   steps: AgentStep[];
-  latestScreenshot: string | null; // base64 JPEG
   onSuggestion: (suggestion: Suggestion) => void;
   onPostRunSuggestions: (suggestions: Suggestion[]) => void;
 }
@@ -17,7 +16,6 @@ export function useObserver({
   status,
   task,
   steps,
-  latestScreenshot,
   onSuggestion,
   onPostRunSuggestions,
 }: UseObserverOptions) {
@@ -38,8 +36,6 @@ export function useObserver({
       seenSuggestions.current.clear();
 
       const poll = async () => {
-        if (stepsRef.current.length === 0) return;
-
         try {
           const res = await fetch(`${WORKER_URL}/api/observe`, {
             method: "POST",
@@ -51,7 +47,6 @@ export function useObserver({
                 action: { type: s.action, action: s.description },
                 timing: { stepDurationMs: s.durationMs },
               })),
-              ...(latestScreenshot ? { screenshot_base64: latestScreenshot } : {}),
               previous_suggestions: Array.from(seenSuggestions.current),
             }),
           });
@@ -82,6 +77,8 @@ export function useObserver({
         }
       };
 
+      // Immediate first poll, then continue on interval
+      poll();
       intervalRef.current = setInterval(poll, OBSERVER_POLL_INTERVAL_MS);
 
       return () => {
@@ -91,7 +88,7 @@ export function useObserver({
         }
       };
     }
-  }, [status, task, latestScreenshot, onSuggestion]);
+  }, [status, task, onSuggestion]);
 
   // Post-run analysis
   const runPostRunAnalysis = useCallback(

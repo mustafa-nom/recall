@@ -73,28 +73,30 @@ export default function SessionViewer({
     <div className="session-viewer-frame rounded-xl overflow-hidden relative aspect-video w-full">
       {/* Idle empty state */}
       {isIdle && (
-        <div className="session-dot-grid absolute inset-0 flex flex-col items-center justify-center gap-3">
-          <div className="w-16 h-12 rounded-lg border-2 border-border-bright border-dashed flex items-center justify-center">
-            <svg
-              className="w-6 h-6 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
-              />
-            </svg>
+        <div className="session-dot-grid absolute inset-0 flex flex-col items-center justify-center text-text-muted gap-3">
+          <svg
+            className="w-8 h-8 text-border-bright"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
+            />
+          </svg>
+          <div className="text-center max-w-[18rem] px-2">
+            <p className="text-xs font-medium text-text-secondary">
+              Browser preview
+            </p>
+            <p className="text-[11px] text-text-muted mt-0.5">
+              The live browser session appears here while the agent runs so you can
+              watch every action
+            </p>
           </div>
-          <p className="text-sm font-medium text-text-secondary">
-            Browser preview
-          </p>
-          <p className="text-xs text-text-muted max-w-xs text-center">
-            Enter a task and hit Run to watch the agent work in real time
-          </p>
         </div>
       )}
 

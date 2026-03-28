@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import TaskInput from "./TaskInput";
+import SidePanel from "./SidePanel";
 import SessionViewer from "./SessionViewer";
 import StatsBar from "./StatsBar";
 import StepFeed from "./StepFeed";
@@ -36,6 +37,8 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
     totalTokens: 0,
   });
   const [maxSteps, setMaxSteps] = useState(DEFAULT_MAX_STEPS);
+  const [panelMode, setPanelMode] = useState<"bottom" | "side">("bottom");
+  const [bottomBarExpanded, setBottomBarExpanded] = useState(false);
   const [shortcutsApplied, setShortcutsApplied] = useState(0);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -43,7 +46,6 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
   } | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [liveViewUrl, setLiveViewUrl] = useState("");
-  const [latestScreenshotB64] = useState<string | null>(null);
 
   // Observer hook
   const handleSuggestion = useCallback((suggestion: Suggestion) => {
@@ -61,7 +63,6 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
     status,
     task,
     steps,
-    latestScreenshot: latestScreenshotB64,
     onSuggestion: handleSuggestion,
     onPostRunSuggestions: handlePostRunSuggestions,
   });
@@ -137,58 +138,86 @@ export default function AgentTab({ onStatusChange }: AgentTabProps) {
     <div className="flex flex-col h-full">
       {status === "running" && <div className="running-bar" />}
 
-      <div className="flex flex-1 overflow-hidden p-5">
-        <div className="flex flex-col flex-1 gap-4 min-w-0 pb-6">
-          <SessionViewer
-            status={status}
-            liveViewUrl={liveViewUrl}
-            screenshotUrl={screenshotUrl}
-            completionMessage={message?.text}
-            stepCount={steps.length}
-            totalTimeMs={timing.totalElapsedMs}
-          />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main content */}
+        <div className="flex flex-1 overflow-hidden p-5">
+          <div className="flex flex-col flex-1 gap-4 min-w-0 pb-6">
+            <SessionViewer
+              status={status}
+              liveViewUrl={liveViewUrl}
+              screenshotUrl={screenshotUrl}
+              completionMessage={message?.text}
+              stepCount={steps.length}
+              totalTimeMs={timing.totalElapsedMs}
+            />
 
-          <StatsBar
-            steps={steps.length}
-            timing={timing}
-            usage={usage}
-            shortcutsApplied={shortcutsApplied}
-            suggestions={suggestions.length}
-            status={status}
-          />
+            <StatsBar
+              steps={steps.length}
+              timing={timing}
+              usage={usage}
+              shortcutsApplied={shortcutsApplied}
+              suggestions={suggestions.length}
+              status={status}
+            />
 
-          {message && status !== "complete" && status !== "failed" && (
-            <div
-              className={`animate-slide-in px-4 py-2.5 rounded-lg border-l-4 text-sm ${
-                message.type === "success"
-                  ? "bg-success/5 border-success text-success"
-                  : "bg-error/5 border-error text-error"
-              }`}
-            >
-              {message.text}
-            </div>
-          )}
+            {message && status !== "complete" && status !== "failed" && (
+              <div
+                className={`animate-slide-in px-4 py-2.5 rounded-lg border-l-4 text-sm ${
+                  message.type === "success"
+                    ? "bg-success/5 border-success text-success"
+                    : "bg-error/5 border-error text-error"
+                }`}
+              >
+                {message.text}
+              </div>
+            )}
 
-          <div className="flex flex-1 gap-4 min-h-[300px]">
-            <div className="flex-[3] min-w-0 overflow-hidden">
-              <StepFeed steps={steps} status={status} />
-            </div>
-            <div className="flex-[2] min-w-0 overflow-hidden">
-              <SuggestionsPanel suggestions={suggestions} status={status} />
+            <div className="flex flex-1 gap-4 min-h-[300px]">
+              <div className="flex-[3] min-w-0 overflow-hidden">
+                <StepFeed steps={steps} status={status} />
+              </div>
+              <div className="flex-[2] min-w-0 overflow-hidden">
+                <SuggestionsPanel suggestions={suggestions} status={status} />
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Side panel */}
+        {panelMode === "side" && (
+          <SidePanel
+            status={status}
+            maxSteps={maxSteps}
+            onMaxStepsChange={setMaxSteps}
+            onRun={handleRun}
+            onCancel={handleCancel}
+            onReset={handleReset}
+            onSwitchToBottom={() => {
+              setBottomBarExpanded(true);
+              setPanelMode("bottom");
+            }}
+            onClose={() => {
+              setBottomBarExpanded(false);
+              setPanelMode("bottom");
+            }}
+          />
+        )}
       </div>
 
-      {/* Floating morphing task input */}
-      <TaskInput
-        status={status}
-        maxSteps={maxSteps}
-        onMaxStepsChange={setMaxSteps}
-        onRun={handleRun}
-        onCancel={handleCancel}
-        onReset={handleReset}
-      />
+      {/* Floating morphing task input (only in bottom mode) */}
+      {panelMode === "bottom" && (
+        <TaskInput
+          key={`bottom-${bottomBarExpanded}`}
+          initialExpanded={bottomBarExpanded}
+          status={status}
+          maxSteps={maxSteps}
+          onMaxStepsChange={setMaxSteps}
+          onRun={handleRun}
+          onCancel={handleCancel}
+          onReset={handleReset}
+          onSwitchToSidePanel={() => setPanelMode("side")}
+        />
+      )}
     </div>
   );
 }

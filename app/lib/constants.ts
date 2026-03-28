@@ -8,5 +8,5 @@ export const APP_DESCRIPTION =
 export const DEFAULT_MODEL = "gemini-2.5-flash-native-audio-latest"; // Only model supporting bidiGenerateContent + tools
 export const DEFAULT_MAX_STEPS = 30;
 
-export const OBSERVER_POLL_INTERVAL_MS = 10_000; // 10 seconds
+export const OBSERVER_POLL_INTERVAL_MS = 5_000; // 5 seconds
 export const SCREENSHOT_STREAM_FPS = 2;
