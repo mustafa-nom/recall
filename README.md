@@ -2,14 +2,6 @@
 
 Recall is a **self-improving browsing agent**: a Next.js UI sends tasks to a Python worker that controls a real browser (Playwright) using the **Gemini Live API**, while a **Hub** stores and retrieves learned shortcuts with semantic search (ChromaDB + Gemini embeddings).
 
-## Architecture diagram
-
-Flow is similar in spirit to classic Gemini competition submissions: **user input** on the left, **model roles** in the middle, **OUTPUT** on the right, plus a **parallel streaming** band for live UI updates.
-
-![Recall system architecture](docs/images/recall-architecture.png)
-
-*(The Markdown preview in some editors hides `*.svg` images; this PNG is for reliable preview. A vector version is still in [`docs/images/recall-architecture.svg`](docs/images/recall-architecture.svg). On GitHub, either format works.)*
-
 ## Which Gemini capability does what?
 
 | Role | API / model style | What it does in Recall |
